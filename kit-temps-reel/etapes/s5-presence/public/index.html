@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Kit temps reel - Presence</title>
+  <style>
+    body { font: 14px system-ui, sans-serif; margin: 2rem; }
+    input[type=range] { width: 300px; }
+    #members li { font-family: monospace; }
+    pre { background: #f4f4f4; padding: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Presence et signal ephemere</h1>
+  <p>Ouvrez cette page dans 2 onglets. Chaque onglet est un membre (id aleatoire).</p>
+  <label>mon curseur : <input id="cursor" type="range" min="0" max="100" value="0" /></label>
+  <h2>Membres presents</h2>
+  <ul id="members"></ul>
+  <pre id="log"></pre>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const log = (m) => (document.getElementById('log').textContent += m + '\n')
+    const me = 'u' + Math.floor(Math.random() * 1000)
+    const others = new Map()
+
+    function render() {
+      document.getElementById('members').innerHTML =
+        [`${me} (moi)`, ...[...others].map(([u, c]) => `${u} @ ${c}`)]
+          .map((t) => `<li>${t}</li>`).join('')
+    }
+
+    const socket = io()
+    socket.on('connect', () => {
+      socket.emit('join', 'canal:demo', me, (snapshot) => {
+        for (const m of snapshot) if (m.userId !== me) others.set(m.userId, m.cursor)
+        render()
+        log('snapshot recu : ' + snapshot.map((m) => m.userId).join(', '))
+      })
+    })
+    socket.on('presence-joined', (u) => { others.set(u, 0); render(); log(u + ' a rejoint') })
+    socket.on('presence-left', (u) => { others.delete(u); render(); log(u + ' est parti') })
+    socket.on('cursor-move', ({ userId, pos }) => { others.set(userId, pos); render() })
+
+    document.getElementById('cursor').addEventListener('input', (e) => {
+      socket.emit('cursor-move', Number(e.target.value))
+    })
+  </script>
+</body>
+</html>

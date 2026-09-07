@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Kit temps reel - SSE</title>
+  <style>
+    body { font: 14px system-ui, sans-serif; margin: 2rem; }
+    pre { background: #f4f4f4; padding: 1rem; height: 60vh; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h1>Canal SSE</h1>
+  <p>Un item par seconde. Coupez le reseau (DevTools &gt; Network &gt; Offline) 5 s puis
+     reactivez : la numerotation reprend sans trou (rattrapage via <code>Last-Event-ID</code>).</p>
+  <pre id="log"></pre>
+  <script>
+    const log = document.getElementById('log')
+    const source = new EventSource('/stream')
+    source.onmessage = (e) => {
+      log.textContent += `[${e.lastEventId}] ${e.data}\n`
+      log.scrollTop = log.scrollHeight
+    }
+    source.addEventListener('resync-needed', (e) => {
+      log.textContent += `--- ${e.data} ---\n`
+    })
+    source.onerror = () => {
+      log.textContent += '--- connexion perdue, reconnexion automatique ---\n'
+    }
+  </script>
+</body>
+</html>

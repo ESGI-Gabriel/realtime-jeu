@@ -1,0 +1,11 @@
+# toxiproxy pour le chaos reseau. Le signaling tourne cote hote (npm run s9) ou dans un conteneur
+# de votre template ; ici on n'expose que toxiproxy.
+#   docker compose -f etapes/s9-webrtc/docker-compose.yml up
+name: kit-s9-chaos
+
+services:
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy
+    ports:
+      - "8474:8474"    # API d'administration
+      - "19001:19001"  # proxy devant votre serveur temps reel

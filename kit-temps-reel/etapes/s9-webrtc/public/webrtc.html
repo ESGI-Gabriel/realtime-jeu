@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Kit temps reel - WebRTC data channel</title>
+  <style>
+    body { font: 14px system-ui, sans-serif; margin: 2rem; }
+    pre { background: #f4f4f4; padding: 1rem; height: 55vh; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h1>Data channel P2P</h1>
+  <p>Ouvrir dans 2 fenetres. Attendre "canal P2P ouvert", puis "Envoyer".</p>
+  <button id="send">Envoyer</button>
+  <pre id="log"></pre>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const log = (m) => {
+      const el = document.getElementById('log')
+      el.textContent += m + '\n'
+      el.scrollTop = el.scrollHeight
+    }
+    const socket = io()
+    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
+    let channel
+
+    pc.onicecandidate = (e) => {
+      if (e.candidate) {
+        log('ICE local: ' + e.candidate.candidate) // <- capture demandee
+        socket.emit('ice-candidate', e.candidate)
+      }
+    }
+    pc.ondatachannel = (e) => setupChannel(e.channel)
+
+    function setupChannel(ch) {
+      channel = ch
+      ch.onopen = () => log('canal P2P ouvert')
+      ch.onmessage = (e) => log('P2P recu: ' + e.data)
+    }
+
+    socket.emit('join', 'call:1')
+    socket.on('room-full', () => log('room pleine (deja 2 pairs)'))
+
+    socket.on('peer-ready', async () => {
+      setupChannel(pc.createDataChannel('app'))
+      await pc.setLocalDescription(await pc.createOffer())
+      socket.emit('offer', pc.localDescription)
+    })
+    socket.on('offer', async (offer) => {
+      await pc.setRemoteDescription(offer)
+      await pc.setLocalDescription(await pc.createAnswer())
+      socket.emit('answer', pc.localDescription)
+    })
+    socket.on('answer', (answer) => pc.setRemoteDescription(answer))
+    socket.on('ice-candidate', (c) => pc.addIceCandidate(c).catch(() => {}))
+
+    document.getElementById('send').onclick = () => channel?.send('coucou ' + Date.now())
+  </script>
+</body>
+</html>
