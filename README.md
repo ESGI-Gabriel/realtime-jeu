@@ -13,11 +13,11 @@ npm start          # http://localhost:3000
 
 ## API REST
 
-| Methode | Route | Description |
-|---|---|---|
-| GET | `/api/parties` | liste des parties |
-| GET | `/api/parties/:id` | detail d'une partie (joueurs, etat) |
-| POST | `/api/parties` | cree une partie (`{ "nom": "..." }`) |
+| Methode | Route              | Description                          |
+| ------- | ------------------ | ------------------------------------ |
+| GET     | `/api/parties`     | liste des parties                    |
+| GET     | `/api/parties/:id` | detail d'une partie (joueurs, etat)  |
+| POST    | `/api/parties`     | cree une partie (`{ "nom": "..." }`) |
 
 Donnees de demonstration : `npm run seed` (1 partie ouverte, 2 joueurs).
 
@@ -46,3 +46,14 @@ src/realtime/piege.scenario.ts   deux actions dans le meme tick
 public/index.html          front de demonstration (2 onglets = 2 joueurs)
 docs/adr/                  vos Architecture Decision Records
 ```
+
+## Sujet
+
+Sujet n° : 4
+
+## Choix de communication (ADR-1, amorce)
+
+- Sens du flux principal : bidirectionnel
+- Technique envisagée : WebSockets
+- Pourquoi : Le serveur et les clients doivent pouvoir échanger des informations en temps réel afin que tous les joueurs aient un état du jeu à jour
+- Pourquoi pas WebRTC : Le serveur doit gérer les ticks, effectuer les calculs et appliquer les règles du jeu
