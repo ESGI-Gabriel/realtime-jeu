@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jeu multijoueur</title>
+  <style>
+    body { font: 14px system-ui, sans-serif; margin: 1.5rem; max-width: 720px; }
+    #arene { position: relative; height: 80px; border: 1px solid #ccc; margin: 1rem 0; }
+    .pion { position: absolute; top: 25px; width: 28px; height: 28px; border-radius: 50%;
+            display: grid; place-items: center; color: #fff; transition: left .1s linear; }
+    .hint { color: #666; }
+    button { font: inherit; padding: 4px 12px; }
+    #parties button { margin: 2px; }
+  </style>
+</head>
+<body>
+  <h1>Jeu multijoueur <span id="status" class="hint">deconnecte</span></h1>
+  <div id="parties"></div>
+  <p class="hint">
+    Ouvrez 2 onglets (2 joueurs). Fleches gauche / droite pour bouger. Le stub applique vos
+    inputs sans boucle a tick et sans borne : tapez vite, ou trichez depuis la console
+    (<code>ws.send(JSON.stringify({kind:'move',joueurId:ID,dx:999}))</code>) et le pion saute
+    hors de l'arene.
+  </p>
+  <div id="arene"></div>
+  <p>tick serveur : <span id="tick">-</span></p>
+
+  <script>
+    const me = 'joueur-' + Math.floor(Math.random() * 1000)
+    const status = document.getElementById('status')
+    const arene = document.getElementById('arene')
+    window.ID = me
+
+    fetch('/api/parties').then((r) => r.json()).then((list) => {
+      document.getElementById('parties').innerHTML =
+        list.map((p) => `<button>${p.nom} (${p.statut})</button>`).join('')
+    })
+
+    const ws = new WebSocket(`ws://${location.host}`)
+    window.ws = ws
+    ws.onopen = () => (status.textContent = 'connecte ' + me)
+    ws.onclose = () => (status.textContent = 'deconnecte')
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data)
+      if (msg.type !== 'state') return
+      document.getElementById('tick').textContent = msg.state.tick
+      const players = Object.entries(msg.state.positions)
+      arene.innerHTML = players.map(([id, x], i) => {
+        const left = Math.max(0, Math.min(100, (x + 10) * 5)) // [-10,10] -> [0,100]%
+        const hue = (i * 120) % 360
+        return `<div class="pion" style="left:${left}%;background:hsl(${hue} 60% 45%)"
+                     title="${id}">${id === me ? 'moi' : id.slice(-2)}</div>`
+      }).join('')
+    }
+
+    addEventListener('keydown', (e) => {
+      const dx = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0
+      if (dx) ws.send(JSON.stringify({ kind: 'move', joueurId: me, dx }))
+    })
+  </script>
+</body>
+</html>
