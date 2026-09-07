@@ -27,5 +27,6 @@ Les ADR correspondants : `docs/adr/0001` (etape 2, acceptee etape 4), `docs/adr/
 
 ## Constat initial (a remplir a l'etape 1)
 
-<Decrivez en 3 a 5 phrases ce que vous observez en lancant `npm start` et en ouvrant 2 onglets :
-ce qui fonctionne mal dans la couche temps reel, et pourquoi.>
+Il n'est pas possible de choisir une partie, tous les joueurs se retrouvent dans la même room
+Les déplacements ne sont pas limités, ce qui permet aux pions de sortir de l'arène
+Les joueurs peuvent également se traverser, car aucune collision n'est gérée entre les pions.
