@@ -9,7 +9,7 @@ import { startNaiveStub } from './realtime/naive-stub.ts'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT ?? 3000)
 
-const store = createStore()
+export const store = createStore()
 const app = Fastify({ logger: false })
 
 await app.register(fastifyStatic, { root: join(HERE, '..', 'public') })
