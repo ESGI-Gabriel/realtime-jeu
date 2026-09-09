@@ -3,61 +3,246 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Jeu multijoueur</title>
+  <title>Jeu multijoueur — Lobby</title>
   <style>
-    body { font: 14px system-ui, sans-serif; margin: 1.5rem; max-width: 720px; }
-    #arene { position: relative; height: 80px; border: 1px solid #ccc; margin: 1rem 0; }
-    .pion { position: absolute; top: 25px; width: 28px; height: 28px; border-radius: 50%;
-            display: grid; place-items: center; color: #fff; transition: left .1s linear; }
-    .hint { color: #666; }
-    button { font: inherit; padding: 4px 12px; }
-    #parties button { margin: 2px; }
+    :root { color: #20201d; background: #f4efe5; font-family: Georgia, serif; }
+    body { max-width: 760px; margin: 3rem auto; padding: 0 1rem; }
+    h1 { margin-bottom: .2rem; font-size: clamp(2rem, 7vw, 4rem); }
+    .hint, #message { color: #68645c; }
+    form, #parties, #detail { border: 1px solid #bbb4a7; background: #fffdf7; padding: 1rem; margin: 1rem 0; }
+    form { display: flex; gap: .5rem; }
+    input { min-width: 0; flex: 1; font: inherit; padding: .5rem; }
+    button { cursor: pointer; border: 1px solid #20201d; background: #eab95a; color: #20201d; font: inherit; padding: .5rem .75rem; }
+    button:hover { background: #20201d; color: #fffdf7; }
+    .partie { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-top: 1px solid #ded8cc; padding: .75rem 0; }
+    .partie:first-child { border-top: 0; }
+    #partie-actions { display: flex; gap: .5rem; }
+    #detail:empty { display: none; }
   </style>
 </head>
 <body>
-  <h1>Jeu multijoueur <span id="status" class="hint">deconnecte</span></h1>
-  <div id="parties"></div>
-  <p class="hint">
-    Ouvrez 2 onglets (2 joueurs). Fleches gauche / droite pour bouger. Le stub applique vos
-    inputs sans boucle a tick et sans borne : tapez vite, ou trichez depuis la console
-    (<code>ws.send(JSON.stringify({kind:'move',joueurId:ID,dx:999}))</code>) et le pion saute
-    hors de l'arene.
-  </p>
-  <div id="arene"></div>
-  <p>tick serveur : <span id="tick">-</span></p>
+  <section id="login-view">
+    <h1>Jeu multijoueur</h1>
+    <p class="hint">Choisissez un nom pour rejoindre le lobby.</p>
+    <form id="login-form">
+      <input id="username" name="username" required maxlength="80" placeholder="Votre nom" />
+      <button>Entrer</button>
+    </form>
+    <p id="login-message" role="status"></p>
+  </section>
 
+  <section id="lobby-view" hidden>
+    <h1>Lobby</h1>
+    <p class="hint">Choisissez une partie ou créez-en une nouvelle.</p>
+
+    <form id="create-form">
+      <input id="partie-nom" name="nom" required maxlength="80" placeholder="Nom de la partie" />
+      <button>Créer</button>
+    </form>
+    <p id="message" role="status"></p>
+
+    <button id="refresh" type="button">Actualiser le lobby</button>
+    <section id="parties" aria-live="polite">Chargement…</section>
+  </section>
+
+  <section id="partie-view" hidden>
+    <h1 id="partie-title">Partie</h1>
+    <section id="detail"></section>
+    <p id="partie-message" role="status"></p>
+    <div id="partie-actions">
+      <button id="ready" type="button">Ready</button>
+      <button id="leave" type="button">Leave</button>
+    </div>
+  </section>
+
+  <script src="/socket.io/socket.io.js"></script>
   <script>
-    const me = 'joueur-' + Math.floor(Math.random() * 1000)
-    const status = document.getElementById('status')
-    const arene = document.getElementById('arene')
-    window.ID = me
+    const parties = document.getElementById('parties')
+    const detail = document.getElementById('detail')
+    const message = document.getElementById('message')
+    const loginView = document.getElementById('login-view')
+    const loginForm = document.getElementById('login-form')
+    const usernameInput = document.getElementById('username')
+    const loginMessage = document.getElementById('login-message')
+    const form = document.getElementById('create-form')
+    const nameInput = document.getElementById('partie-nom')
+    const lobbyView = document.getElementById('lobby-view')
+    const partieView = document.getElementById('partie-view')
+    const partieTitle = document.getElementById('partie-title')
+    const partieMessage = document.getElementById('partie-message')
+    const readyButton = document.getElementById('ready')
+    const socket = io({ autoConnect: false })
+    let currentPartieId = null
+    let currentUserId = localStorage.getItem('username')
+    let stream = null
 
-    fetch('/api/parties').then((r) => r.json()).then((list) => {
-      document.getElementById('parties').innerHTML =
-        list.map((p) => `<button>${p.nom} (${p.statut})</button>`).join('')
+    socket.on('connect', () => {
+      loginView.hidden = true
+      lobbyView.hidden = false
+      connectLobbyStream()
+      loadLobby()
     })
 
-    const ws = new WebSocket(`ws://${location.host}`)
-    window.ws = ws
-    ws.onopen = () => (status.textContent = 'connecte ' + me)
-    ws.onclose = () => (status.textContent = 'deconnecte')
-    ws.onmessage = (e) => {
-      const msg = JSON.parse(e.data)
-      if (msg.type !== 'state') return
-      document.getElementById('tick').textContent = msg.state.tick
-      const players = Object.entries(msg.state.positions)
-      arene.innerHTML = players.map(([id, x], i) => {
-        const left = Math.max(0, Math.min(100, (x + 10) * 5)) // [-10,10] -> [0,100]%
-        const hue = (i * 120) % 360
-        return `<div class="pion" style="left:${left}%;background:hsl(${hue} 60% 45%)"
-                     title="${id}">${id === me ? 'moi' : id.slice(-2)}</div>`
-      }).join('')
+    socket.on('connect_error', (error) => {
+      stream?.close()
+      localStorage.removeItem('jwt')
+      localStorage.removeItem('username')
+      currentUserId = null
+      loginView.hidden = false
+      lobbyView.hidden = true
+      loginMessage.textContent = `Connexion impossible : ${error.message}`
+    })
+
+    socket.on('partie-updated', (partie) => {
+      if (partie.id === currentPartieId) renderPartie(partie)
+    })
+
+    async function request(url, options) {
+      const response = await fetch(url, options)
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Erreur serveur')
+      return data
     }
 
-    addEventListener('keydown', (e) => {
-      const dx = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0
-      if (dx) ws.send(JSON.stringify({ kind: 'move', joueurId: me, dx }))
+    function connectLobbyStream() {
+      stream?.close()
+      stream = new EventSource('/api/stream')
+      stream.onmessage = (event) => {
+        try {
+          const update = JSON.parse(event.data)
+          if (update.type !== 'lobby-updated') return
+          loadLobby()
+        } catch {
+          // Ignore les anciens messages SSE qui ne sont pas des mises a jour du lobby.
+        }
+      }
+    }
+
+    function renderPartie(partie) {
+      const names = partie.joueurs
+        .map((joueur) => `${joueur.pseudo} (${joueur.pret ? 'ready' : 'not ready'})`)
+        .join(', ')
+      const me = partie.joueurs.find((joueur) => joueur.id === currentUserId)
+      partieTitle.textContent = partie.nom
+      detail.textContent = `${partie.joueurs.length} joueur(s) : ${names || 'aucun joueur'}.`
+      readyButton.dataset.ready = String(Boolean(me?.pret))
+      readyButton.textContent = me?.pret ? 'Not ready' : 'Ready'
+    }
+
+    async function loadLobby() {
+      message.textContent = ''
+      try {
+        const list = await request('/api/parties')
+        parties.replaceChildren(...list.map((partie) => {
+          const row = document.createElement('div')
+          row.className = 'partie'
+          const label = document.createElement('span')
+          const names = partie.nomsJoueurs.length ? partie.nomsJoueurs.join(', ') : 'aucun joueur'
+          label.textContent = `${partie.nom} — ${partie.joueurs} joueur(s) : ${names} — ${partie.statut}`
+          const open = document.createElement('button')
+          open.type = 'button'
+          open.textContent = 'Rejoindre'
+          open.onclick = () => loadPartie(partie.id)
+          row.append(label, open)
+          return row
+        }))
+        if (!list.length) parties.textContent = 'Aucune partie. Créez la première.'
+      } catch (error) {
+        parties.textContent = 'Impossible de charger le lobby.'
+        message.textContent = error.message
+      }
+    }
+
+    async function loadPartie(id) {
+      try {
+        const partie = await request(`/api/parties/${encodeURIComponent(id)}`)
+        socket.emit('join', partie.id, async (success, error) => {
+          if (!success) {
+            message.textContent = error || 'Impossible de rejoindre la partie.'
+            return
+          }
+          try {
+            const updated = await request(`/api/parties/${encodeURIComponent(partie.id)}`)
+            currentPartieId = updated.id
+            renderPartie(updated)
+            lobbyView.hidden = true
+            partieView.hidden = false
+          } catch (error) {
+            message.textContent = error.message
+          }
+        })
+      } catch (error) {
+        message.textContent = error.message
+      }
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault()
+      try {
+        const partie = await request('/api/parties', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nom: nameInput.value.trim() }),
+        })
+        nameInput.value = ''
+        message.textContent = `Partie « ${partie.nom} » créée.`
+        await loadLobby()
+        await loadPartie(partie.id)
+      } catch (error) {
+        message.textContent = error.message
+      }
     })
+
+    loginForm.addEventListener('submit', async (event) => {
+      event.preventDefault()
+      try {
+        const username = usernameInput.value.trim()
+        const { token } = await request('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username }),
+        })
+        localStorage.setItem('jwt', token)
+        localStorage.setItem('username', username)
+        currentUserId = username
+        socket.auth = { token }
+        socket.connect()
+      } catch (error) {
+        loginMessage.textContent = error.message
+      }
+    })
+
+    document.getElementById('refresh').onclick = loadLobby
+    readyButton.onclick = () => {
+      if (!currentPartieId) return
+      const event = readyButton.dataset.ready === 'true' ? 'not-ready' : 'ready'
+      readyButton.disabled = true
+      socket.emit(event, currentPartieId, (success, error) => {
+        readyButton.disabled = false
+        partieMessage.textContent = success ? '' : error || 'Impossible de modifier votre état.'
+      })
+    }
+    document.getElementById('leave').onclick = () => {
+      if (!currentPartieId) return
+      socket.emit('leave', currentPartieId, (success, error) => {
+        if (!success) {
+          partieMessage.textContent = error || 'Impossible de quitter la partie.'
+          return
+        }
+        currentPartieId = null
+        partieView.hidden = true
+        lobbyView.hidden = false
+        loadLobby()
+      })
+    }
+    const savedToken = localStorage.getItem('jwt')
+    if (savedToken && currentUserId) {
+      socket.auth = { token: savedToken }
+      socket.connect()
+    } else {
+      localStorage.removeItem('jwt')
+      localStorage.removeItem('username')
+    }
   </script>
 </body>
 </html>

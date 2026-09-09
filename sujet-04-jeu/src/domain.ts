@@ -73,3 +73,12 @@ export function send(raw: any, event: Event): void {
   raw.write(`id: ${event.id}\n`);
   raw.write(`data: ${event.data}\n\n`);
 }
+
+export function canJoinRoom(roomId: string): boolean {
+  const currentGame = store.parties.get(roomId);
+  return (
+    currentGame !== undefined &&
+    currentGame.statut === "lobby" &&
+    currentGame.joueurs.length < 4
+  );
+}

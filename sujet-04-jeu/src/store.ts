@@ -7,8 +7,6 @@ import type { Event, Partie } from "./domain.ts";
 
 export interface Store {
   parties: Map<string, Partie>;
-  /** partie unique utilisee par le stub, quel que soit l'id demande. */
-  active: Partie;
   nextEventId: number;
   events: Event[];
 }
@@ -17,7 +15,6 @@ export function createStore(): Store {
   const parties = buildSeed();
   return {
     parties,
-    active: [...parties.values()][0],
     events: [],
     nextEventId: 0,
   };
@@ -35,10 +32,4 @@ export function parseClientInput(raw: unknown): ClientInput | null {
   if (o.kind !== "move") return null;
   if (typeof o.joueurId !== "string" || typeof o.dx !== "number") return null;
   return { kind: "move", joueurId: o.joueurId, dx: o.dx };
-}
-
-export function applyNaive(store: Store, input: ClientInput): void {
-  const pos = store.active.etat.positions;
-  // AUCUN bornage : on ajoute directement le dx du client
-  pos[input.joueurId] = (pos[input.joueurId] ?? 0) + input.dx;
 }

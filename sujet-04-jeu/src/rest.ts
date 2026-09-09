@@ -1,14 +1,42 @@
 import type { FastifyInstance } from "fastify";
+import type { ServerResponse } from "node:http";
+import jwt from "jsonwebtoken";
 import { creerPartie, record, send, type Partie } from "./domain.ts";
 import type { Store } from "./store.ts";
 
+const SECRET = process.env.SECRET ?? "test";
+const streamClients = new Set<ServerResponse>();
+
+export function publishLobbyUpdate(partie: Partie): void {
+  const preview = {
+    id: partie.id,
+    nom: partie.nom,
+    statut: partie.statut,
+    joueurs: partie.joueurs.length,
+    nomsJoueurs: partie.joueurs.map((joueur) => joueur.pseudo),
+  };
+  const event = record(JSON.stringify({ type: "lobby-updated", preview }));
+  for (const client of streamClients) send(client, event);
+}
+
 export function registerRoutes(app: FastifyInstance, store: Store): void {
+  app.post("/api/login", async (req, reply) => {
+    const body = (req.body ?? {}) as { username?: string };
+    const username = body.username?.trim();
+    if (!username)
+      return reply.code(400).send({ error: "username requis" });
+    return reply.code(200).send({
+      token: jwt.sign({ sub: username }, SECRET, { expiresIn: "1h" }),
+    });
+  });
+
   app.get("/api/parties", async () =>
     [...store.parties.values()].map((p) => ({
       id: p.id,
       nom: p.nom,
       statut: p.statut,
       joueurs: p.joueurs.length,
+      nomsJoueurs: p.joueurs.map((joueur) => joueur.pseudo),
     })),
   );
 
@@ -30,6 +58,7 @@ export function registerRoutes(app: FastifyInstance, store: Store): void {
   });
 
   app.get("/api/stream", async (req, reply) => {
+    reply.hijack();
     reply.raw.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
@@ -47,6 +76,7 @@ export function registerRoutes(app: FastifyInstance, store: Store): void {
       if (event.id > lastEventId) send(reply.raw, event);
     }
 
-    send(reply.raw, record(`item ${store.nextEventId}`));
+    streamClients.add(reply.raw);
+    req.raw.on("close", () => streamClients.delete(reply.raw));
   });
 }
